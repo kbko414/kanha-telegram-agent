@@ -3,7 +3,7 @@
 # Target: Ubuntu 24.04 / 26.04 Server
 # Usage:
 #   sudo bash setup_tgagent.sh
-#   curl -fsSL <YOUR_RAW_URL>/setup_tgagent.sh | sudo bash
+#   curl -fsSL https://raw.githubusercontent.com/kbko414/kanha-telegram-agent/main/setup_tgagent.sh | sudo bash
 
 set -euo pipefail
 
