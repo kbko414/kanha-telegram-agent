@@ -93,7 +93,7 @@ step "[3/7] Creating project files in ${APP_DIR}..."
 mkdir -p "${APP_DIR}"/{memory,work}
 
 cat > "${APP_DIR}/requirements.txt" <<'EOF'
-python-telegram-bot==21.6
+python-telegram-bot==22.8
 aiohttp==3.10.5
 python-dotenv==1.0.1
 requests==2.32.3
