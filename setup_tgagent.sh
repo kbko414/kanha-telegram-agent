@@ -40,14 +40,14 @@ echo -e "${C_CYAN}  Backend: Ollama (local, uncensored)          ${C_RESET}"
 echo -e "${C_CYAN}================================================${C_RESET}"
 
 # 1. System packages
-step "[1/7] Installing Python 3 & dependencies..."
+step "[1/9] Installing Python 3 & dependencies..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq python3 python3-venv python3-pip curl ca-certificates >/dev/null
 ok "Python $(python3 --version | awk '{print $2}') ready."
 
 # 2. Ollama + low-RAM tuning + swap
-step "[2/7] Installing Ollama (local model server)..."
+step "[2/9] Installing Ollama (local model server)..."
 if ! command -v ollama >/dev/null 2>&1; then
   curl -fsSL https://ollama.com/install.sh | sh
   ok "Ollama installed."
@@ -56,7 +56,7 @@ else
 fi
 systemctl enable --now ollama
 
-step "[2/7] Tuning Ollama for low RAM..."
+step "[3/9] Tuning Ollama for low RAM..."
 mkdir -p /etc/systemd/system/ollama.service.d
 cat > /etc/systemd/system/ollama.service.d/override.conf <<'EOF'
 [Service]
@@ -72,7 +72,7 @@ ok "Ollama tuned: 1 model, 5 min keep-alive, flash attention, q8_0 KV cache."
 
 TOTAL_RAM_MB=$(free -m | awk '/^Mem:/ {print $2}')
 if [[ "${TOTAL_RAM_MB}" -lt 8192 ]] && [[ -z "$(swapon --show --noheadings)" ]]; then
-  step "[2/7] Low RAM (${TOTAL_RAM_MB} MB) - adding 4 GB swapfile..."
+  step "[3/9] Low RAM (${TOTAL_RAM_MB} MB) - adding 4 GB swapfile..."
   fallocate -l 4G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=4096 status=none
   chmod 600 /swapfile
   mkswap /swapfile >/dev/null
@@ -88,8 +88,8 @@ done
 curl -fsS http://localhost:11434/api/tags >/dev/null || fail "Ollama API did not come up on http://localhost:11434"
 ok "Ollama API up."
 
-# 3. Scaffold application files
-step "[3/7] Creating project files in ${APP_DIR}..."
+# 4. Scaffold application files
+step "[4/9] Creating project files in ${APP_DIR}..."
 mkdir -p "${APP_DIR}"/{memory,work}
 
 cat > "${APP_DIR}/requirements.txt" <<'EOF'
@@ -386,15 +386,15 @@ PYEOF
 touch "${APP_DIR}/work/.gitkeep" "${APP_DIR}/memory/.gitkeep"
 ok "Project files written."
 
-# 4. Python venv & packages
-step "[4/7] Creating virtual environment & installing packages..."
+# 5. Python venv & packages
+step "[5/9] Creating virtual environment & installing packages..."
 python3 -m venv "${APP_DIR}/venv"
 "${APP_DIR}/venv/bin/pip" install --quiet --upgrade pip
 "${APP_DIR}/venv/bin/pip" install --quiet -r "${APP_DIR}/requirements.txt"
 ok "Python packages installed."
 
-# 5. Interactive credentials prompt (token input hidden)
-step "[5/7] Configuring .env (token input is hidden)..."
+# 6. Interactive credentials prompt (token input hidden)
+step "[6/9] Configuring .env (token input is hidden)..."
 TTY="/dev/tty"
 read -rsp "  Telegram Bot Token (@BotFather): " TG_TOKEN < "${TTY}"; echo " [saved]"
 read -rp  "  Your Telegram User ID (@userinfobot): " OWNER_ID < "${TTY}"
@@ -405,8 +405,14 @@ MODEL="${MODEL:-${DEFAULT_MODEL}}"
 if [[ "${MODEL}" =~ ^[0-9]+$ ]]; then
   fail "MODEL '${MODEL}' is a number, not a model name - press Enter at the prompt to use the default (${DEFAULT_MODEL})."
 fi
+# A bot token or API hash pasted as the model is the same mix-up.
+if [[ "${MODEL}" =~ ^[0-9]+:[A-Za-z0-9_-]{20,}$ ]] || [[ "${MODEL}" =~ ^[0-9a-f]{32}$ ]]; then
+  fail "MODEL '${MODEL}' looks like a Telegram credential (bot token or API hash), not a model name - press Enter at the prompt to use the default (${DEFAULT_MODEL})."
+fi
 
 [[ -n "${TG_TOKEN}" ]] || fail "TG_TOKEN cannot be empty."
+# A BotFather token looks like 123456:ABC... - an API ID or hash pasted here is the wrong credential.
+[[ "${TG_TOKEN}" =~ ^[0-9]{5,}:[A-Za-z0-9_-]{20,}$ ]] || fail "TG_TOKEN doesn't look like a BotFather token (expected 123456:ABC...). Paste the token from @BotFather, not the API ID or API hash."
 [[ "${OWNER_ID}" =~ ^[0-9]+$ ]] || fail "OWNER_ID must be a numeric Telegram user ID."
 
 cat > "${APP_DIR}/.env" <<EOF
@@ -419,8 +425,8 @@ EOF
 chmod 600 "${APP_DIR}/.env"
 ok ".env created with 600 permissions."
 
-# 6. Download model & set up service
-step "[6/7] Downloading model ${MODEL} (about 0.7 GB, one time)..."
+# 7. Download model & set up service
+step "[7/9] Downloading model ${MODEL} (about 0.7 GB, one time)..."
 AVAIL_KB=$(df --output=avail -k / | tail -1)
 if [[ "${AVAIL_KB}" -lt 3145728 ]]; then
   fail "Less than 3 GB free disk - cannot download ${MODEL}."
@@ -428,11 +434,17 @@ fi
 if ollama list 2>/dev/null | grep -qi "${MODEL%%:*}"; then
   ok "Model ${MODEL} already present."
 else
-  ollama pull "${MODEL}"
+  PULL_OK=0
+  for attempt in 1 2 3; do
+    if ollama pull "${MODEL}"; then PULL_OK=1; break; fi
+    warn "Model pull failed (attempt ${attempt}/3) - retrying in 5s..."
+    sleep 5
+  done
+  [[ "${PULL_OK}" -eq 1 ]] || fail "Could not download model ${MODEL} after 3 attempts - check your network and try again."
 fi
 ok "Model ready."
 
-step "[6/7] Setting up non-root user & systemd service..."
+step "[8/9] Setting up non-root user & systemd service..."
 if ! id -u "${SERVICE_USER}" >/dev/null 2>&1; then
   useradd --system --home-dir "${APP_DIR}" --shell /usr/sbin/nologin "${SERVICE_USER}"
 fi
@@ -463,8 +475,8 @@ systemctl daemon-reload
 systemctl enable --now "${SERVICE_NAME}"
 ok "systemd service '${SERVICE_NAME}' enabled and started."
 
-# 7. Verify status
-step "[7/7] Checking service status..."
+# 9. Verify status
+step "[9/9] Checking service status..."
 sleep 2
 if systemctl is-active --quiet "${SERVICE_NAME}"; then
   ok "Bot is LIVE! Open Telegram and send /start to your bot."
