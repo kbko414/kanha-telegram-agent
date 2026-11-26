@@ -15,7 +15,7 @@ set -euo pipefail
 APP_DIR="/opt/tgagent"
 SERVICE_USER="tgagent"
 SERVICE_NAME="tgagent"
-DEFAULT_MODEL="dolphin-mistral:latest"
+DEFAULT_MODEL="hf.co/saidutta69/LFM2.5-1.2B-Instruct-heretic:Q4_K_M"
 
 # Colors for clean screen-recording output
 C_CYAN='\033[1;36m'
@@ -103,7 +103,7 @@ cat > "${APP_DIR}/.env.example" <<'EOF'
 TG_TOKEN=123456:ABC-xxxxxxxxxxxxxxxxxxxx
 API_BASE=http://localhost:11434/v1
 API_KEY=sk-no-key
-MODEL=dolphin-mistral:latest
+MODEL=hf.co/saidutta69/LFM2.5-1.2B-Instruct-heretic:Q4_K_M
 OWNER_ID=0
 EOF
 
@@ -117,7 +117,7 @@ load_dotenv()
 TG_TOKEN   = os.environ["TG_TOKEN"]
 API_BASE   = os.environ.get("API_BASE", "http://localhost:11434/v1")
 API_KEY    = os.environ.get("API_KEY", "sk-no-key")
-MODEL      = os.environ.get("MODEL", "dolphin-mistral:latest")
+MODEL      = os.environ.get("MODEL", "hf.co/saidutta69/LFM2.5-1.2B-Instruct-heretic:Q4_K_M")
 OWNER_ID   = int(os.environ.get("OWNER_ID", "0"))
 
 BASE_DIR     = Path(__file__).parent
@@ -415,12 +415,12 @@ chmod 600 "${APP_DIR}/.env"
 ok ".env created with 600 permissions."
 
 # 6. Download model & set up service
-step "[6/7] Downloading model ${MODEL} (about 4 GB, one time)..."
+step "[6/7] Downloading model ${MODEL} (about 0.7 GB, one time)..."
 AVAIL_KB=$(df --output=avail -k / | tail -1)
-if [[ "${AVAIL_KB}" -lt 6291456 ]]; then
-  fail "Less than 6 GB free disk - cannot download ${MODEL}."
+if [[ "${AVAIL_KB}" -lt 3145728 ]]; then
+  fail "Less than 3 GB free disk - cannot download ${MODEL}."
 fi
-if ollama list 2>/dev/null | grep -q "${MODEL%%:*}"; then
+if ollama list 2>/dev/null | grep -qi "${MODEL%%:*}"; then
   ok "Model ${MODEL} already present."
 else
   ollama pull "${MODEL}"

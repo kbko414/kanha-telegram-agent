@@ -8,13 +8,13 @@ Uncensored AI agent - Telegram bot အနေနဲ့။ Tools: shell, file, web
 curl -fsSL https://raw.githubusercontent.com/kbko414/kanha-telegram-agent/main/setup_tgagent.sh | sudo bash
 ```
 
-Installer က Python, Ollama, model (dolphin-mistral), .env, systemd service အကုန်လုပ်ပေးတယ်။ ပြီးရင် Telegram မှာ bot ကို /start ပို့ရုံပဲ။ အသေးစိတ်က အောက်မှာ ရှိတယ်။
+Installer က Python, Ollama, model (LFM2.5-1.2B-Heretic), .env, systemd service အကုန်လုပ်ပေးတယ်။ ပြီးရင် Telegram မှာ bot ကို /start ပို့ရုံပဲ။ အသေးစိတ်က အောက်မှာ ရှိတယ်။
 
 ## လိုအပ်တဲ့ server အခြေအနေ (Requirements)
 
 - OS: Ubuntu 24.04 / 26.04 Server (x86_64), root/sudo ရှိရမယ်
 - Internet: Ollama + model download အတွက် လိုတယ်
-- Disk: အနည်းဆုံး 6GB လွတ်ရမယ်
+- Disk: အနည်းဆုံး 3GB လွတ်ရမယ်
 - Python 3 + venv (installer က သွင်းပေးတယ်)
 - Telegram bot token (@BotFather) + မင်း Telegram user ID (@userinfobot)
 - Public port မလိုဘူး — Ollama က localhost:11434 ပဲ, bot က Telegram polling သုံးတယ်
@@ -23,8 +23,9 @@ Model ရွေးချယ်မှု (RAM အလိုက်):
 
 | Model | Download | RAM (load ပြီးရင်) | ဘယ် server နဲ့ ကိုက်လဲ |
 | --- | --- | --- | --- |
-| dolphin-mistral:latest (7B, default) | ≈4GB | ≈5GB | RAM 8GB+ server |
-| qwen2.5:3b | 1.9GB | ≈2.2GB | RAM 4GB server (Spain လို) |
+| LFM2.5-1.2B-Heretic (1.2B, default) | 0.7GB | ≈1GB | server တိုင်း (Spain လို RAM 4GB လည်း OK) |
+| qwen2.5:3b | 1.9GB | ≈2.2GB | RAM 4GB+ server |
+| dolphin-mistral:latest (7B) | ≈4GB | ≈5GB | RAM 8GB+ server |
 
 RAM 8GB အောက် server ဆို installer က 4GB swapfile အလိုအလျောက် ထည့်ပေးတယ်။
 
@@ -44,7 +45,7 @@ pip install -r requirements.txt
 
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull dolphin-mistral
+ollama pull hf.co/saidutta69/LFM2.5-1.2B-Instruct-heretic:Q4_K_M
 systemctl enable --now ollama
 ```
 
@@ -58,7 +59,7 @@ nano .env
 
 · TG_TOKEN - @BotFather ကနေ ယူ
 · OWNER_ID - @userinfobot ကနေ ယူ
-· MODEL - dolphin-mistral:latest
+· MODEL - hf.co/saidutta69/LFM2.5-1.2B-Instruct-heretic:Q4_K_M
 
 ၄။ Run
 

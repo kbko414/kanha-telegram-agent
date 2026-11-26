@@ -7,7 +7,7 @@ load_dotenv()
 TG_TOKEN   = os.environ["TG_TOKEN"]
 API_BASE   = os.environ.get("API_BASE", "http://localhost:11434/v1")
 API_KEY    = os.environ.get("API_KEY", "sk-no-key")
-MODEL      = os.environ.get("MODEL", "dolphin-mistral:latest")
+MODEL      = os.environ.get("MODEL", "hf.co/saidutta69/LFM2.5-1.2B-Instruct-heretic:Q4_K_M")
 OWNER_ID   = int(os.environ.get("OWNER_ID", "0"))
 
 BASE_DIR     = Path(__file__).parent
