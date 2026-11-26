@@ -401,6 +401,11 @@ read -rp  "  Your Telegram User ID (@userinfobot): " OWNER_ID < "${TTY}"
 read -rp  "  Model ID [default: ${DEFAULT_MODEL}]: " MODEL < "${TTY}"
 MODEL="${MODEL:-${DEFAULT_MODEL}}"
 
+# A bare number is a Telegram ID, never a model - refuse it before ollama pull fails.
+if [[ "${MODEL}" =~ ^[0-9]+$ ]]; then
+  fail "MODEL '${MODEL}' is a number, not a model name - press Enter at the prompt to use the default (${DEFAULT_MODEL})."
+fi
+
 [[ -n "${TG_TOKEN}" ]] || fail "TG_TOKEN cannot be empty."
 [[ "${OWNER_ID}" =~ ^[0-9]+$ ]] || fail "OWNER_ID must be a numeric Telegram user ID."
 
