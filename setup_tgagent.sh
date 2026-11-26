@@ -47,6 +47,11 @@ apt-get install -y -qq python3 python3-venv python3-pip curl ca-certificates >/d
 ok "Python $(python3 --version | awk '{print $2}') ready."
 
 # 2. Ollama + low-RAM tuning + swap
+# If an Ollama server already answers on :11434 (e.g. a Docker container),
+# use it as-is - a second host copy would only fight over the port and crash-loop.
+if curl -fsS --max-time 5 http://localhost:11434/api/tags >/dev/null 2>&1; then
+  ok "Ollama already running on http://localhost:11434 - using the existing server."
+else
 step "[2/9] Installing Ollama (local model server)..."
 if ! command -v ollama >/dev/null 2>&1; then
   curl -fsSL https://ollama.com/install.sh | sh
@@ -69,6 +74,7 @@ EOF
 systemctl daemon-reload
 systemctl restart ollama
 ok "Ollama tuned: 1 model, 5 min keep-alive, flash attention, q8_0 KV cache."
+fi
 
 TOTAL_RAM_MB=$(free -m | awk '/^Mem:/ {print $2}')
 if [[ "${TOTAL_RAM_MB}" -lt 8192 ]] && [[ -z "$(swapon --show --noheadings)" ]]; then
