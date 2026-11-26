@@ -10,6 +10,24 @@ curl -fsSL https://raw.githubusercontent.com/kbko414/kanha-telegram-agent/main/s
 
 Installer က Python, Ollama, model (dolphin-mistral), .env, systemd service အကုန်လုပ်ပေးတယ်။ ပြီးရင် Telegram မှာ bot ကို /start ပို့ရုံပဲ။ အသေးစိတ်က အောက်မှာ ရှိတယ်။
 
+## လိုအပ်တဲ့ server အခြေအနေ (Requirements)
+
+- OS: Ubuntu 24.04 / 26.04 Server (x86_64), root/sudo ရှိရမယ်
+- Internet: Ollama + model download အတွက် လိုတယ်
+- Disk: အနည်းဆုံး 6GB လွတ်ရမယ်
+- Python 3 + venv (installer က သွင်းပေးတယ်)
+- Telegram bot token (@BotFather) + မင်း Telegram user ID (@userinfobot)
+- Public port မလိုဘူး — Ollama က localhost:11434 ပဲ, bot က Telegram polling သုံးတယ်
+
+Model ရွေးချယ်မှု (RAM အလိုက်):
+
+| Model | Download | RAM (load ပြီးရင်) | ဘယ် server နဲ့ ကိုက်လဲ |
+| --- | --- | --- | --- |
+| dolphin-mistral:latest (7B, default) | ≈4GB | ≈5GB | RAM 8GB+ server |
+| qwen2.5:3b | 1.9GB | ≈2.2GB | RAM 4GB server (Spain လို) |
+
+RAM 8GB အောက် server ဆို installer က 4GB swapfile အလိုအလျောက် ထည့်ပေးတယ်။
+
 ## ၁။ တပ်ဆင်ခြင်း
 
 ```bash
