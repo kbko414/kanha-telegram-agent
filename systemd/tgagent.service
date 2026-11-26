@@ -1,0 +1,18 @@
+[Unit]
+Description=Kanha Telegram Agent (FreeModel.in API)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tgagent
+WorkingDirectory=/opt/tgagent
+EnvironmentFile=/opt/tgagent/.env
+ExecStart=/opt/tgagent/venv/bin/python /opt/tgagent/bot.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
