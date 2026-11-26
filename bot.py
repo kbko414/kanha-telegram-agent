@@ -2,7 +2,7 @@ import json
 from telegram import Update
 from telegram.ext import (Application, CommandHandler, MessageHandler,
     filters, ContextTypes, TypeHandler, ApplicationHandlerStop)
-from config import TG_TOKEN, OWNER_ID, MEMORY_DIR, MODEL, API_BASE, SYSTEM_PROMPT
+from config import TG_TOKEN, OWNER_ID, MEMORY_DIR, MODEL, API_BASE, SYSTEM_PROMPT, HISTORY_LIMIT
 from agent import run_agent
 
 def mem_path(cid): return MEMORY_DIR / f"{cid}.json"
@@ -15,7 +15,7 @@ def load_history(cid):
     return [{"role": "system", "content": SYSTEM_PROMPT}]
 
 def save_history(cid, hist):
-    trimmed = [hist[0]] + [m for m in hist[1:] if m.get("role") in ("user","assistant")][-40:]
+    trimmed = [hist[0]] + [m for m in hist[1:] if m.get("role") in ("user","assistant")][-HISTORY_LIMIT:]
     mem_path(cid).write_text(json.dumps(trimmed, ensure_ascii=False, indent=1), encoding="utf-8")
 
 async def guard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):

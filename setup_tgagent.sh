@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
-# One-command installer for Kanha Telegram Agent (FreeModel.in API)
+# One-command installer for Kanha Telegram Agent (Ollama, local)
 # Target: Ubuntu 24.04 / 26.04 Server
 # Usage:
 #   sudo bash setup_tgagent.sh
 #   curl -fsSL https://raw.githubusercontent.com/kbko414/kanha-telegram-agent/main/setup_tgagent.sh | sudo bash
+#
+# Low-RAM design: Ollama runs one model at a time, small 4K context,
+# q8_0 KV cache + flash attention, model unloads after 5 min idle.
+# On boxes with <8 GB RAM a 4 GB swapfile is added automatically so the
+# 7B model fits (slow under swap - a 3B model is the fallback if too slow).
 
 set -euo pipefail
 
 APP_DIR="/opt/tgagent"
 SERVICE_USER="tgagent"
 SERVICE_NAME="tgagent"
+DEFAULT_MODEL="dolphin-mistral:latest"
 
 # Colors for clean screen-recording output
 C_CYAN='\033[1;36m'
@@ -30,18 +36,60 @@ fi
 clear || true
 echo -e "${C_CYAN}================================================${C_RESET}"
 echo -e "${C_CYAN}  Kanha Telegram Agent — Ubuntu 26 Auto Setup   ${C_RESET}"
-echo -e "${C_CYAN}  Backend: FreeModel.in (https://freemodel.in)  ${C_RESET}"
+echo -e "${C_CYAN}  Backend: Ollama (local, uncensored)          ${C_RESET}"
 echo -e "${C_CYAN}================================================${C_RESET}"
 
 # 1. System packages
-step "[1/6] Installing Python 3 & dependencies..."
+step "[1/7] Installing Python 3 & dependencies..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y -qq python3 python3-venv python3-pip curl ca-certificates >/dev/null
 ok "Python $(python3 --version | awk '{print $2}') ready."
 
-# 2. Scaffold application files
-step "[2/6] Creating project files in ${APP_DIR}..."
+# 2. Ollama + low-RAM tuning + swap
+step "[2/7] Installing Ollama (local model server)..."
+if ! command -v ollama >/dev/null 2>&1; then
+  curl -fsSL https://ollama.com/install.sh | sh
+  ok "Ollama installed."
+else
+  ok "Ollama already installed ($(ollama --version))."
+fi
+systemctl enable --now ollama
+
+step "[2/7] Tuning Ollama for low RAM..."
+mkdir -p /etc/systemd/system/ollama.service.d
+cat > /etc/systemd/system/ollama.service.d/override.conf <<'EOF'
+[Service]
+Environment="OLLAMA_KEEP_ALIVE=5m"
+Environment="OLLAMA_MAX_LOADED_MODELS=1"
+Environment="OLLAMA_NUM_PARALLEL=1"
+Environment="OLLAMA_FLASH_ATTENTION=1"
+Environment="OLLAMA_KV_CACHE_TYPE=q8_0"
+EOF
+systemctl daemon-reload
+systemctl restart ollama
+ok "Ollama tuned: 1 model, 5 min keep-alive, flash attention, q8_0 KV cache."
+
+TOTAL_RAM_MB=$(free -m | awk '/^Mem:/ {print $2}')
+if [[ "${TOTAL_RAM_MB}" -lt 8192 ]] && [[ -z "$(swapon --show --noheadings)" ]]; then
+  step "[2/7] Low RAM (${TOTAL_RAM_MB} MB) - adding 4 GB swapfile..."
+  fallocate -l 4G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=4096 status=none
+  chmod 600 /swapfile
+  mkswap /swapfile >/dev/null
+  swapon /swapfile
+  grep -q "^/swapfile " /etc/fstab || echo "/swapfile none swap sw 0 0" >> /etc/fstab
+  ok "Swapfile active (4 GB)."
+fi
+
+for _ in $(seq 1 30); do
+  curl -fsS http://localhost:11434/api/tags >/dev/null 2>&1 && break
+  sleep 2
+done
+curl -fsS http://localhost:11434/api/tags >/dev/null || fail "Ollama API did not come up on http://localhost:11434"
+ok "Ollama API up."
+
+# 3. Scaffold application files
+step "[3/7] Creating project files in ${APP_DIR}..."
 mkdir -p "${APP_DIR}"/{memory,work}
 
 cat > "${APP_DIR}/requirements.txt" <<'EOF'
@@ -53,9 +101,9 @@ EOF
 
 cat > "${APP_DIR}/.env.example" <<'EOF'
 TG_TOKEN=123456:ABC-xxxxxxxxxxxxxxxxxxxx
-API_BASE=https://freemodel.in/v1
-API_KEY=fm_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-MODEL=gpt-6-luna
+API_BASE=http://localhost:11434/v1
+API_KEY=sk-no-key
+MODEL=dolphin-mistral:latest
 OWNER_ID=0
 EOF
 
@@ -67,9 +115,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TG_TOKEN   = os.environ["TG_TOKEN"]
-API_BASE   = os.environ.get("API_BASE", "https://freemodel.in/v1")
-API_KEY    = os.environ.get("API_KEY", "")
-MODEL      = os.environ.get("MODEL", "gpt-6-luna")
+API_BASE   = os.environ.get("API_BASE", "http://localhost:11434/v1")
+API_KEY    = os.environ.get("API_KEY", "sk-no-key")
+MODEL      = os.environ.get("MODEL", "dolphin-mistral:latest")
 OWNER_ID   = int(os.environ.get("OWNER_ID", "0"))
 
 BASE_DIR     = Path(__file__).parent
@@ -78,7 +126,7 @@ WORK_DIR     = BASE_DIR / "work"
 MEMORY_DIR.mkdir(exist_ok=True)
 WORK_DIR.mkdir(exist_ok=True)
 
-HISTORY_LIMIT = 40
+HISTORY_LIMIT = 20
 MAX_TOOL_ROUNDS = 8
 SHELL_TIMEOUT = 60
 
@@ -205,6 +253,8 @@ async def chat_completion(messages, temperature=0.8, tools=True):
         "messages": messages,
         "temperature": temperature,
         "stream": False,
+        # Small context keeps KV-cache RAM low on small VPS boxes.
+        "options": {"num_ctx": 4096},
     }
     if tools:
         payload["tools"] = TOOL_SCHEMAS
@@ -245,7 +295,7 @@ import json
 from telegram import Update
 from telegram.ext import (Application, CommandHandler, MessageHandler,
     filters, ContextTypes, TypeHandler, ApplicationHandlerStop)
-from config import TG_TOKEN, OWNER_ID, MEMORY_DIR, MODEL, API_BASE, SYSTEM_PROMPT
+from config import TG_TOKEN, OWNER_ID, MEMORY_DIR, MODEL, API_BASE, SYSTEM_PROMPT, HISTORY_LIMIT
 from agent import run_agent
 
 def mem_path(cid): return MEMORY_DIR / f"{cid}.json"
@@ -258,7 +308,7 @@ def load_history(cid):
     return [{"role": "system", "content": SYSTEM_PROMPT}]
 
 def save_history(cid, hist):
-    trimmed = [hist[0]] + [m for m in hist[1:] if m.get("role") in ("user","assistant")][-40:]
+    trimmed = [hist[0]] + [m for m in hist[1:] if m.get("role") in ("user","assistant")][-HISTORY_LIMIT:]
     mem_path(cid).write_text(json.dumps(trimmed, ensure_ascii=False, indent=1), encoding="utf-8")
 
 async def guard(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -336,38 +386,48 @@ PYEOF
 touch "${APP_DIR}/work/.gitkeep" "${APP_DIR}/memory/.gitkeep"
 ok "Project files written."
 
-# 3. Python venv & packages
-step "[3/6] Creating virtual environment & installing packages..."
+# 4. Python venv & packages
+step "[4/7] Creating virtual environment & installing packages..."
 python3 -m venv "${APP_DIR}/venv"
 "${APP_DIR}/venv/bin/pip" install --quiet --upgrade pip
 "${APP_DIR}/venv/bin/pip" install --quiet -r "${APP_DIR}/requirements.txt"
 ok "Python packages installed."
 
-# 4. Interactive credentials prompt (hidden input for screen recording safety)
-step "[4/6] Configuring .env (inputs for keys are hidden for screen recording)..."
+# 5. Interactive credentials prompt (token input hidden)
+step "[5/7] Configuring .env (token input is hidden)..."
 TTY="/dev/tty"
 read -rsp "  Telegram Bot Token (@BotFather): " TG_TOKEN < "${TTY}"; echo " [saved]"
-read -rsp "  FreeModel.in API Key (fm_...):   " API_KEY  < "${TTY}"; echo " [saved]"
 read -rp  "  Your Telegram User ID (@userinfobot): " OWNER_ID < "${TTY}"
-read -rp  "  Model ID [default: gpt-6-luna]: " MODEL < "${TTY}"
-MODEL="${MODEL:-gpt-6-luna}"
+read -rp  "  Model ID [default: ${DEFAULT_MODEL}]: " MODEL < "${TTY}"
+MODEL="${MODEL:-${DEFAULT_MODEL}}"
 
 [[ -n "${TG_TOKEN}" ]] || fail "TG_TOKEN cannot be empty."
-[[ -n "${API_KEY}"  ]] || fail "API_KEY cannot be empty."
 [[ "${OWNER_ID}" =~ ^[0-9]+$ ]] || fail "OWNER_ID must be a numeric Telegram user ID."
 
 cat > "${APP_DIR}/.env" <<EOF
 TG_TOKEN=${TG_TOKEN}
-API_BASE=https://freemodel.in/v1
-API_KEY=${API_KEY}
+API_BASE=http://localhost:11434/v1
+API_KEY=sk-no-key
 MODEL=${MODEL}
 OWNER_ID=${OWNER_ID}
 EOF
 chmod 600 "${APP_DIR}/.env"
 ok ".env created with 600 permissions."
 
-# 5. Service user & systemd unit
-step "[5/6] Setting up non-root user & systemd service..."
+# 6. Download model & set up service
+step "[6/7] Downloading model ${MODEL} (about 4 GB, one time)..."
+AVAIL_KB=$(df --output=avail -k / | tail -1)
+if [[ "${AVAIL_KB}" -lt 6291456 ]]; then
+  fail "Less than 6 GB free disk - cannot download ${MODEL}."
+fi
+if ollama list 2>/dev/null | grep -q "${MODEL%%:*}"; then
+  ok "Model ${MODEL} already present."
+else
+  ollama pull "${MODEL}"
+fi
+ok "Model ready."
+
+step "[6/7] Setting up non-root user & systemd service..."
 if ! id -u "${SERVICE_USER}" >/dev/null 2>&1; then
   useradd --system --home-dir "${APP_DIR}" --shell /usr/sbin/nologin "${SERVICE_USER}"
 fi
@@ -375,8 +435,8 @@ chown -R "${SERVICE_USER}:${SERVICE_USER}" "${APP_DIR}"
 
 cat > "/etc/systemd/system/${SERVICE_NAME}.service" <<EOF
 [Unit]
-Description=Kanha Telegram Agent (FreeModel.in API)
-After=network-online.target
+Description=Kanha Telegram Agent (Ollama, local)
+After=network-online.target ollama.service
 Wants=network-online.target
 
 [Service]
@@ -398,8 +458,8 @@ systemctl daemon-reload
 systemctl enable --now "${SERVICE_NAME}"
 ok "systemd service '${SERVICE_NAME}' enabled and started."
 
-# 6. Verify status
-step "[6/6] Checking service status..."
+# 7. Verify status
+step "[7/7] Checking service status..."
 sleep 2
 if systemctl is-active --quiet "${SERVICE_NAME}"; then
   ok "Bot is LIVE! Open Telegram and send /start to your bot."
@@ -408,12 +468,14 @@ else
   journalctl -u "${SERVICE_NAME}" -n 15 --no-pager
   exit 1
 fi
+ollama list
 
 echo ""
 echo -e "${C_GREEN}================================================${C_RESET}"
-echo -e "${C_GREEN}  SETUP COMPLETE — Ubuntu 26 + FreeModel.in     ${C_RESET}"
+echo -e "${C_GREEN}  SETUP COMPLETE — Ubuntu 26 + Ollama (local)   ${C_RESET}"
 echo -e "${C_GREEN}================================================${C_RESET}"
 echo "  Logs:    sudo journalctl -u ${SERVICE_NAME} -f"
 echo "  Restart: sudo systemctl restart ${SERVICE_NAME}"
 echo "  Config:  sudo nano ${APP_DIR}/.env"
+echo "  Models:  ollama list"
 echo ""

@@ -1,6 +1,6 @@
 [Unit]
-Description=Kanha Telegram Agent (FreeModel.in API)
-After=network-online.target
+Description=Kanha Telegram Agent (Ollama, local)
+After=network-online.target ollama.service
 Wants=network-online.target
 
 [Service]

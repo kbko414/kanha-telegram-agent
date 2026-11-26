@@ -10,6 +10,8 @@ async def chat_completion(messages, temperature=0.8, tools=True):
         "messages": messages,
         "temperature": temperature,
         "stream": False,
+        # Small context keeps KV-cache RAM low on small VPS boxes.
+        "options": {"num_ctx": 4096},
     }
     if tools:
         payload["tools"] = TOOL_SCHEMAS

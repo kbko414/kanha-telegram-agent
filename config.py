@@ -5,9 +5,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 TG_TOKEN   = os.environ["TG_TOKEN"]
-API_BASE   = os.environ.get("API_BASE", "https://freemodel.in/v1")
-API_KEY    = os.environ.get("API_KEY", "")
-MODEL      = os.environ.get("MODEL", "gpt-6-luna")
+API_BASE   = os.environ.get("API_BASE", "http://localhost:11434/v1")
+API_KEY    = os.environ.get("API_KEY", "sk-no-key")
+MODEL      = os.environ.get("MODEL", "dolphin-mistral:latest")
 OWNER_ID   = int(os.environ.get("OWNER_ID", "0"))
 
 BASE_DIR     = Path(__file__).parent
@@ -16,7 +16,7 @@ WORK_DIR     = BASE_DIR / "work"
 MEMORY_DIR.mkdir(exist_ok=True)
 WORK_DIR.mkdir(exist_ok=True)
 
-HISTORY_LIMIT = 40
+HISTORY_LIMIT = 20
 MAX_TOOL_ROUNDS = 8
 SHELL_TIMEOUT = 60
 

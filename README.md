@@ -2,6 +2,14 @@
 
 Uncensored AI agent - Telegram bot အနေနဲ့။ Tools: shell, file, web. Memory ပါ။ Owner-only.
 
+## အမြန်တပ်ဆင်နည်း (one-command)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kbko414/kanha-telegram-agent/main/setup_tgagent.sh | sudo bash
+```
+
+Installer က Python, Ollama, model (dolphin-mistral), .env, systemd service အကုန်လုပ်ပေးတယ်။ ပြီးရင် Telegram မှာ bot ကို /start ပို့ရုံပဲ။ အသေးစိတ်က အောက်မှာ ရှိတယ်။
+
 ## ၁။ တပ်ဆင်ခြင်း
 
 ```bash
